@@ -24,9 +24,8 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringReader;
 import java.io.StringWriter;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.UUID;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -47,6 +46,9 @@ import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
 
+import io.github.classgraph.ClassGraph;
+import io.github.classgraph.Resource;
+import io.github.classgraph.ScanResult;
 import org.apache.camel.CamelContext;
 import org.apache.camel.generator.swagger.RestDslGenerator;
 import org.apache.camel.impl.DefaultCamelContext;
@@ -57,6 +59,9 @@ import org.jboss.shrinkwrap.api.asset.Asset;
 import org.jboss.shrinkwrap.api.asset.ClassLoaderAsset;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.exporter.ZipExporter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.springframework.stereotype.Component;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -81,6 +86,7 @@ import io.swagger.util.Json;
 @Api(value = "generate")
 @Component
 public class GenerateFuseProjectResource {
+    private static Logger logger = LoggerFactory.getLogger(GenerateFuseProjectResource.class);
 
     public static final String FUSE_VERSION;
 
@@ -109,13 +115,33 @@ public class GenerateFuseProjectResource {
      */
     @GET
     @Produces(MediaType.APPLICATION_OCTET_STREAM)
-    @Path(value = "/camel-project.zip")
+    @Path(value = "/nodejs-express-project.zip")
     public InputStream generate() throws Exception {
-        try (InputStream openapiDoc = getClass().getResourceAsStream("open-api-example.json")) {
-            return generate(readUTF8(openapiDoc));
-        }
+        return generateNodeJsExpress();
     }
 
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_OCTET_STREAM)
+    @Path(value = "/nodejs-express-project.zip")
+    public InputStream generateNodeJsExpress() throws IOException {
+        GenericArchive archive = ShrinkWrap.create(GenericArchive.class, "nodejs-express-project.zip");
+        addRecursiveResourceDirectory(archive, "nodejs-express-project-template");
+        return archive.as(ZipExporter.class).exportAsInputStream();
+    }
+
+    void addRecursiveResourceDirectory(GenericArchive archive, String dir) throws IOException {
+        final Set<String> resourceFilenames = new HashSet<>();
+        try (ScanResult scanResult = new ClassGraph().whitelistPaths("/nodejs-express-project-template").scan()) {
+            scanResult.getAllResources()
+                .forEachByteArray((Resource res, byte[] fileContent) -> {
+                    resourceFilenames.add(res.getPath());
+                });
+        }
+        resourceFilenames.forEach(filename -> {
+            archive.add(new ClassLoaderAsset(filename), filename);
+        });
+    }
 
     /**
      * Generate a zip file containing a camel project that implements the posted
