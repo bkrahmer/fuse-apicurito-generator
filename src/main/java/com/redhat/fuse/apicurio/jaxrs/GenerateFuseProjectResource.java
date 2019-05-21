@@ -20,6 +20,7 @@ import io.github.classgraph.Resource;
 import io.github.classgraph.ScanResult;
 import io.swagger.annotations.Api;
 import io.swagger.util.Json;
+import org.apache.commons.io.FileUtils;
 import org.jboss.shrinkwrap.api.GenericArchive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.ClassLoaderAsset;
@@ -31,10 +32,9 @@ import org.springframework.stereotype.Component;
 
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.HashSet;
-import java.util.Set;
+import java.io.*;
+import java.nio.file.Files;
+import java.util.*;
 
 /**
  * Implements a jaxrs resource that can be used by Apicurito to
@@ -75,7 +75,36 @@ public class GenerateFuseProjectResource {
         return archive.as(ZipExporter.class).exportAsInputStream();
     }
 
-    private boolean specIsValidJson(String openApiSpec) {
+    boolean runCodeGeneration(String openApiSpec) throws Exception {
+        java.nio.file.Path tempDir = Files.createTempDirectory("codegen");
+        try {
+            File specFile = new File(tempDir.toFile(), "spec");
+            Files.write(specFile.toPath(), openApiSpec.getBytes());
+            List<String> cmdArray = Arrays.asList("/usr/bin/snc", "-o",
+                    tempDir.toFile().getAbsolutePath(), specFile.getAbsolutePath());
+            ProcessBuilder builder = new ProcessBuilder(cmdArray);
+            builder.redirectErrorStream(true);
+            Process process = builder.start();
+            BufferedReader in = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            //snc doesn't utilize proper error codes!
+            List<String> outputLines = new ArrayList<>();
+            String line;
+            while ((line = in.readLine()) != null) {
+                outputLines.add(line);
+            }
+            process.waitFor();
+            if (!outputLines.isEmpty()) {
+                String firstLine = outputLines.get(0);
+                return firstLine.contains("Done!");
+            } else {
+                return false;
+            }
+        } finally {
+            FileUtils.deleteDirectory(tempDir.toFile());
+        }
+    }
+
+    static boolean specIsValidJson(String openApiSpec) {
         try {
             Json.mapper().readTree(openApiSpec);
             return true;
