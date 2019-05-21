@@ -19,6 +19,7 @@ import io.github.classgraph.ClassGraph;
 import io.github.classgraph.Resource;
 import io.github.classgraph.ScanResult;
 import io.swagger.annotations.Api;
+import io.swagger.util.Json;
 import org.jboss.shrinkwrap.api.GenericArchive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.ClassLoaderAsset;
@@ -65,9 +66,22 @@ public class GenerateFuseProjectResource {
     @Path(value = "/nodejs-express-project.zip")
     public InputStream generateNodeJsExpressWithSpec(String openApiSpec) throws IOException {
         GenericArchive archive = ShrinkWrap.create(GenericArchive.class, "nodejs-express-project.zip");
-        archive.add(new StringAsset(openApiSpec), "/openapi.json");
+        if (specIsValidJson(openApiSpec)) {
+            archive.add(new StringAsset(openApiSpec), "openapi.json");
+        } else {
+            archive.add(new StringAsset(openApiSpec), "openapi.yml");
+        }
         addRecursiveResourceDirectory(archive, "nodejs-express-project-template");
         return archive.as(ZipExporter.class).exportAsInputStream();
+    }
+
+    private boolean specIsValidJson(String openApiSpec) {
+        try {
+            Json.mapper().readTree(openApiSpec);
+            return true;
+        } catch (Exception ex) {
+            return false;
+        }
     }
 
     void addRecursiveResourceDirectory(GenericArchive archive, final String dir) throws IOException {
