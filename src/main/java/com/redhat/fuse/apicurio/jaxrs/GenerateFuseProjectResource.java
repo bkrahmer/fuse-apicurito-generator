@@ -21,9 +21,12 @@ import io.github.classgraph.ScanResult;
 import io.swagger.annotations.Api;
 import io.swagger.util.Json;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.filefilter.DirectoryFileFilter;
+import org.apache.commons.io.filefilter.RegexFileFilter;
 import org.jboss.shrinkwrap.api.GenericArchive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.ClassLoaderAsset;
+import org.jboss.shrinkwrap.api.asset.FileAsset;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.exporter.ZipExporter;
 import org.slf4j.Logger;
@@ -48,8 +51,7 @@ public class GenerateFuseProjectResource {
     private static Logger logger = LoggerFactory.getLogger(GenerateFuseProjectResource.class);
 
     /**
-     * Generate an example zip file containing a camel project for an example
-     * openapi spec.
+     * Generate an example zip file
      */
     @GET
     @Produces(MediaType.APPLICATION_OCTET_STREAM)
@@ -64,44 +66,81 @@ public class GenerateFuseProjectResource {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_OCTET_STREAM)
     @Path(value = "/nodejs-express-project.zip")
-    public InputStream generateNodeJsExpressWithSpec(String openApiSpec) throws IOException {
-        GenericArchive archive = ShrinkWrap.create(GenericArchive.class, "nodejs-express-project.zip");
-        if (specIsValidJson(openApiSpec)) {
-            archive.add(new StringAsset(openApiSpec), "openapi.json");
-        } else {
-            archive.add(new StringAsset(openApiSpec), "openapi.yml");
-        }
-        addRecursiveResourceDirectory(archive, "nodejs-express-project-template");
-        return archive.as(ZipExporter.class).exportAsInputStream();
-    }
-
-    boolean runCodeGeneration(String openApiSpec) throws Exception {
+    public InputStream generateNodeJsExpressWithSpec(String openApiSpec) throws Exception {
         java.nio.file.Path tempDir = Files.createTempDirectory("codegen");
         try {
-            File specFile = new File(tempDir.toFile(), "spec");
-            Files.write(specFile.toPath(), openApiSpec.getBytes());
-            List<String> cmdArray = Arrays.asList("/usr/bin/snc", "-o",
-                    tempDir.toFile().getAbsolutePath(), specFile.getAbsolutePath());
-            ProcessBuilder builder = new ProcessBuilder(cmdArray);
-            builder.redirectErrorStream(true);
-            Process process = builder.start();
-            BufferedReader in = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            //snc doesn't utilize proper error codes!
-            List<String> outputLines = new ArrayList<>();
-            String line;
-            while ((line = in.readLine()) != null) {
-                outputLines.add(line);
-            }
-            process.waitFor();
-            if (!outputLines.isEmpty()) {
-                String firstLine = outputLines.get(0);
-                return firstLine.contains("Done!");
+            GenericArchive archive = ShrinkWrap.create(GenericArchive.class, "nodejs-express-project.zip");
+            if (specIsValidJson(openApiSpec)) {
+                archive.add(new StringAsset(openApiSpec), "openapi.json");
             } else {
-                return false;
+                archive.add(new StringAsset(openApiSpec), "openapi.yml");
             }
+            runCodeGeneration(tempDir, archive, openApiSpec);
+            return archive.as(ZipExporter.class).exportAsInputStream();
         } finally {
-            FileUtils.deleteDirectory(tempDir.toFile());
+            tempDir.toFile().deleteOnExit();
         }
+    }
+
+    boolean runCodeGeneration(java.nio.file.Path tempDir, GenericArchive archive, String openApiSpec) throws Exception {
+        String templatePath = "/home/bkrahmer/projects/codeready-playground/rhnodejs-server";
+        //TODO: change to /rhnodejs-template
+        File template = new File(templatePath);
+        if (! template.exists()) {
+            logger.warn("Template directory (" + templatePath + ") does not exist");
+            return false;
+        }
+
+        File specFile = new File(tempDir.toFile(), "spec");
+        Files.write(specFile.toPath(), openApiSpec.getBytes());
+        List<String> cmdArray = Arrays.asList("/usr/bin/snc",
+                "-o", tempDir.toFile().getAbsolutePath(),
+                "-t", templatePath,
+                specFile.getAbsolutePath());
+        ProcessBuilder builder = new ProcessBuilder(cmdArray);
+        builder.redirectErrorStream(true);
+        Process process = builder.start();
+        BufferedReader in = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        //snc doesn't utilize proper error codes!
+        List<String> outputLines = new ArrayList<>();
+        String line;
+        while ((line = in.readLine()) != null) {
+            outputLines.add(line);
+        }
+        int exitCode = process.waitFor();
+        specFile.delete();
+        if (!outputLines.isEmpty()) {
+            String firstLine = outputLines.get(0);
+            boolean retval = firstLine.contains("Done!");
+            if (retval) {
+                logger.info("Codegen succeeded");
+                addRecursiveFilesystemDirectory(archive, tempDir.toFile());
+            } else {
+                logger.warn("Codegen failed, exit code was " + exitCode);
+                outputLines.forEach(l -> {
+                    logger.warn("Codegen output: " + l);
+                });
+            }
+            return retval;
+        } else {
+            logger.warn("Codegen failed, exit code was " + exitCode);
+            outputLines.forEach(l -> {
+                logger.warn("Codegen output: " + l);
+            });
+            return false;
+        }
+    }
+
+    void addRecursiveFilesystemDirectory(GenericArchive archive, File dir) {
+        Collection files = FileUtils.listFiles(dir, new RegexFileFilter("^(.*?)"),
+                DirectoryFileFilter.DIRECTORY
+        );
+        final String dirString = dir.toString() + "/";
+        files.forEach(f -> {
+            String filename = f.toString();
+            String shortName = filename.substring(dirString.length());
+            archive.add(new FileAsset((File)f), shortName);
+        });
     }
 
     static boolean specIsValidJson(String openApiSpec) {

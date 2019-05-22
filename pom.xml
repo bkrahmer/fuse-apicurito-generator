@@ -13,19 +13,19 @@
 
 	<modelVersion>4.0.0</modelVersion>
 
-	<groupId>org.jboss.redhat-fuse.apicurio</groupId>
-	<artifactId>fuse-apicurito-generator</artifactId>
+	<groupId>org.jboss.redhat-nodejs.apicurio</groupId>
+	<artifactId>nodejs-apicurito-generator</artifactId>
 	<version>1.0-SNAPSHOT</version>
 
-	<name>Fuse Apicurito Generator</name>
-	<description>An Apicurito generator for Fuse Projects</description>
+	<name>nodejs Apicurito Generator</name>
+	<description>An Apicurito generator for nodejs Projects</description>
 
 	<properties>
 		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-		<image.fuse-apicurito-generator>apicurio/fuse-apicurito-generator:%l</image.fuse-apicurito-generator>
-		<fabric8.generator.name>${image.fuse-apicurito-generator}</fabric8.generator.name>
+		<image.nodejs-apicurito-generator>apicurio/nodejs-apicurito-generator:%l</image.nodejs-apicurito-generator>
+		<fabric8.generator.name>${image.nodejs-apicurito-generator}</fabric8.generator.name>
 
 		<!-- Build properties (overridable in profiles) -->
 		<enforcer.pluginVersions.banSnapshots>false</enforcer.pluginVersions.banSnapshots>
