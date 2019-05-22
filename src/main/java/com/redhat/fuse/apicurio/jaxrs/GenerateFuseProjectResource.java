@@ -83,8 +83,7 @@ public class GenerateFuseProjectResource {
     }
 
     boolean runCodeGeneration(java.nio.file.Path tempDir, GenericArchive archive, String openApiSpec) throws Exception {
-        String templatePath = "/home/bkrahmer/projects/codeready-playground/rhnodejs-server";
-        //TODO: change to /rhnodejs-template
+        String templatePath = "/rhnodejs-template";
         File template = new File(templatePath);
         if (! template.exists()) {
             logger.warn("Template directory (" + templatePath + ") does not exist");
